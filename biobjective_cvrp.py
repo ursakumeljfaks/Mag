@@ -22,7 +22,7 @@ RUNTIME_SECONDS = 30
 SEED = 1
 SCALE = 1000
 
-weights = [(1-w, w) for w in np.linspace(0.05, 0.95, 15)] 
+weights = [(1-w, w) for w in np.linspace(0.05, 0.95, 500)] 
 
 data = read(INSTANCE_PATH, round_func="round")
 
@@ -94,6 +94,29 @@ def true_co2_of_solution(sol, data, type_labels, Q_by_type, f0, alpha, beta, gam
 
     return float(total_co2)
 
+def pareto_front(points):
+    # points = [(dist, co2, ...), ...]
+    nondominated = []
+
+    for i, p in enumerate(points):
+        dist_i, co2_i = p[:2]
+        dominated = False
+
+        for j, q in enumerate(points):
+            if i == j:
+                continue
+
+            dist_j, co2_j = q[:2]
+
+            if (dist_j <= dist_i and co2_j <= co2_i) and (dist_j < dist_i or co2_j < co2_i):
+                dominated = True
+                break
+
+        if not dominated:
+            nondominated.append(p)
+
+    return sorted(nondominated, key=lambda x: x[0])
+
 # Example
 
 total_fleet = 20
@@ -113,15 +136,30 @@ for w_dist, w_co2 in weights:
     co2 = true_co2_of_solution(sol, data, type_labels, Q_by_type, f0=f0, alpha=alpha, beta=beta, gamma=gamma, mult=mult)
 
     records.append((w_dist, w_co2, dist, co2))
-    print(f"w_dist={w_dist:.2f}, w_co2={w_co2:.2f} -> dist={dist}, trueCO2={co2:.2f}")
+    points = [(r[2], r[3], r[0], r[1]) for r in records]  # (dist, co2, w_dist, w_co2)
+    front = pareto_front(points)
+
+    for dist, co2, w_dist, w_co2 in front:
+        print(f"dist={dist}, co2={co2:.2f}, weights=({w_dist:.2f}, {w_co2:.2f})")
+        # print(f"w_dist={w_dist:.2f}, w_co2={w_co2:.2f} -> dist={dist}, trueCO2={co2:.2f}")
 
 
 xs = [r[2] for r in records]
 ys = [r[3] for r in records]
-plt.scatter(xs, ys)
+front = pareto_front([(r[2], r[3], r[0], r[1]) for r in records])
+fx = [p[0] for p in front]
+fy = [p[1] for p in front]
+
+plt.scatter(xs, ys, alpha=0.4, label="All solutions")
+# non-dominated points
+plt.scatter(fx, fy, color="red", s=60, label="Non-dominated")
+# line showing the Pareto front
+plt.plot(fx, fy, color="red", linewidth=2)
+
+# plt.scatter(xs, ys)
 plt.xlabel("Total distance")
-plt.ylabel("CO2 emissions")
-plt.title("Distance vs CO2")
+plt.ylabel("CO$_2$ emissions")
+plt.title(f"Distance vs CO$_2$ ({INSTANCE_PATH.removesuffix(".vrp")})")
 plt.grid(True, alpha=0.3)
 plt.show()
 
