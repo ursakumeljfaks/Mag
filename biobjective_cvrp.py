@@ -19,10 +19,10 @@ co2_per_dist = {k: gamma * fbar[k] for k in mult}  # kg CO2 per unit distance
 
 INSTANCE_PATH = "X-n106-k14.vrp"
 RUNTIME_SECONDS = 30
-SEED = 1
+SEED = 2
 SCALE = 1000
 
-weights = [(1-w, w) for w in np.linspace(0.05, 0.95, 500)] 
+weights = [(1-w, w) for w in np.linspace(0.05, 0.95, 70)] 
 
 data = read(INSTANCE_PATH, round_func="round")
 
@@ -52,7 +52,7 @@ def solve_weighted_surrogate(data, w_dist, w_co2, n_diesel, n_clean):
     model.vehicle_types[0] = vt_d.replace(fixed_cost=0, unit_distance_cost=max(1, unit_diesel))
     model.vehicle_types[1] = vt_c.replace(fixed_cost=0, unit_distance_cost=max(1, unit_clean))
 
-    res = model.solve(stop=MaxRuntime(RUNTIME_SECONDS), seed=SEED, display=False)
+    res = model.solve(stop=MaxRuntime(RUNTIME_SECONDS), display=False) # brez seed dej
     return res.best
 
 
@@ -126,11 +126,12 @@ n_clean = total_fleet - n_diesel
 type_labels = {0: "diesel", 1: "clean"}
 
 base_cap = Model.from_data(data).vehicle_types[0].capacity
-Q_by_type = {"diesel": base_cap, "clean": base_cap}
+print(f"Base capacity: {base_cap[0]}")
+Q_by_type = {"diesel": base_cap[0], "clean": base_cap[0]}  
 
 records = []  # (w_dist, w_co2, dist, true_co2)
 
-for w_dist, w_co2 in weights:
+for i, (w_dist, w_co2) in enumerate(weights, start=1):
     sol = solve_weighted_surrogate(data, w_dist, w_co2, n_diesel, n_clean)
     dist = sol.distance()
     co2 = true_co2_of_solution(sol, data, type_labels, Q_by_type, f0=f0, alpha=alpha, beta=beta, gamma=gamma, mult=mult)
@@ -139,9 +140,9 @@ for w_dist, w_co2 in weights:
     points = [(r[2], r[3], r[0], r[1]) for r in records]  # (dist, co2, w_dist, w_co2)
     front = pareto_front(points)
 
-    for dist, co2, w_dist, w_co2 in front:
-        print(f"dist={dist}, co2={co2:.2f}, weights=({w_dist:.2f}, {w_co2:.2f})")
-        # print(f"w_dist={w_dist:.2f}, w_co2={w_co2:.2f} -> dist={dist}, trueCO2={co2:.2f}")
+    # for dist, co2, w_dist, w_co2 in front:
+    #     print(f"Solution {i}: dist={dist}, co2={co2:.2f}, weights=({w_dist:.2f}, {w_co2:.2f})")
+    print(f"Solution {i}: w_dist={w_dist:.2f}, w_co2={w_co2:.2f} -> dist={dist}, trueCO2={co2:.2f}")
 
 
 xs = [r[2] for r in records]
