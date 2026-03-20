@@ -18,30 +18,29 @@ fbar = {k: f0 * (1 + alpha * (l_nom ** beta)) * mult[k] for k in mult}
 co2_per_dist = {k: gamma * fbar[k] for k in mult}  # kg CO2 per unit distance
 
 INSTANCE_PATH = "X-n106-k14.vrp"
-RUNTIME_SECONDS = 30
-SEED = 2
+RUNTIME_SECONDS = 2
 SCALE = 1000
 
-weights = [(1-w, w) for w in np.linspace(0.05, 0.95, 70)] 
+weights = [(1-w, w) for w in np.linspace(0.05, 0.95, 300)] 
 
 data = read(INSTANCE_PATH, round_func="round")
-
 
 
 def build_model_two_types(data, n_diesel, n_clean, Q_diesel=0, Q_clean=0):
     model = Model.from_data(data)
 
     # first type of vehicle is diesel
-    model.add_vehicle_type(num_available=n_diesel, capacity=Q_diesel)
+    vt0 = model.vehicle_types[0]
+    model.vehicle_types[0] = vt0.replace(num_available=n_diesel, capacity=[Q_diesel], name="diesel")
 
     # second type is clean
-    model.add_vehicle_type(num_available=n_clean, capacity=Q_clean)
+    model.add_vehicle_type(num_available=n_clean, capacity=Q_clean, name="clean")
 
     return model
 
 
-def solve_weighted_surrogate(data, w_dist, w_co2, n_diesel, n_clean):
-    model = build_model_two_types(data, n_diesel=n_diesel, n_clean=n_clean)
+def solve_weighted_surrogate(data, w_dist, w_co2, n_diesel, n_clean, Q_diesel, Q_clean):
+    model = build_model_two_types(data, n_diesel=n_diesel, n_clean=n_clean, Q_diesel=Q_diesel, Q_clean=Q_clean)
 
     # cost_k = w_dist * distance + w_co2 * (co2_per_dist_k * distance) = distance * (w_dist + w_co2 * co2_per_dist_k)
     unit_diesel = int(round(SCALE * (w_dist + w_co2 * co2_per_dist["diesel"])))
@@ -52,7 +51,7 @@ def solve_weighted_surrogate(data, w_dist, w_co2, n_diesel, n_clean):
     model.vehicle_types[0] = vt_d.replace(fixed_cost=0, unit_distance_cost=max(1, unit_diesel))
     model.vehicle_types[1] = vt_c.replace(fixed_cost=0, unit_distance_cost=max(1, unit_clean))
 
-    res = model.solve(stop=MaxRuntime(RUNTIME_SECONDS), display=False) # brez seed dej
+    res = model.solve(stop=MaxRuntime(RUNTIME_SECONDS), display=False) 
     return res.best
 
 
@@ -120,8 +119,8 @@ def pareto_front(points):
 # Example
 
 total_fleet = 20
-n_diesel = total_fleet // 2
-n_clean = total_fleet - n_diesel
+n_diesel = 7#total_fleet // 2
+n_clean = 13#total_fleet - n_diesel
 
 type_labels = {0: "diesel", 1: "clean"}
 
@@ -132,17 +131,23 @@ Q_by_type = {"diesel": base_cap[0], "clean": base_cap[0]}
 records = []  # (w_dist, w_co2, dist, true_co2)
 
 for i, (w_dist, w_co2) in enumerate(weights, start=1):
-    sol = solve_weighted_surrogate(data, w_dist, w_co2, n_diesel, n_clean)
+    sol = solve_weighted_surrogate(data, w_dist, w_co2, n_diesel, n_clean, Q_diesel=Q_by_type["diesel"], Q_clean=Q_by_type["clean"])
     dist = sol.distance()
     co2 = true_co2_of_solution(sol, data, type_labels, Q_by_type, f0=f0, alpha=alpha, beta=beta, gamma=gamma, mult=mult)
 
     records.append((w_dist, w_co2, dist, co2))
-    points = [(r[2], r[3], r[0], r[1]) for r in records]  # (dist, co2, w_dist, w_co2)
-    front = pareto_front(points)
+    #points = [(r[2], r[3], r[0], r[1]) for r in records]  # (dist, co2, w_dist, w_co2)
+    #front = pareto_front(points)
 
     # for dist, co2, w_dist, w_co2 in front:
     #     print(f"Solution {i}: dist={dist}, co2={co2:.2f}, weights=({w_dist:.2f}, {w_co2:.2f})")
     print(f"Solution {i}: w_dist={w_dist:.2f}, w_co2={w_co2:.2f} -> dist={dist}, trueCO2={co2:.2f}")
+
+points = [(r[2], r[3], r[0], r[1]) for r in records]
+front = pareto_front(points)
+
+for i, (dist, co2, w_dist, w_co2) in enumerate(front, start=1):
+    print(f"Pareto {i}: dist={dist}, co2={co2:.2f}, weights=({w_dist:.2f}, {w_co2:.2f})")
 
 
 xs = [r[2] for r in records]
