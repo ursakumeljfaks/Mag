@@ -17,11 +17,11 @@ l_nom = 0.50
 fbar = {k: f0 * (1 + alpha * (l_nom ** beta)) * mult[k] for k in mult}
 co2_per_dist = {k: gamma * fbar[k] for k in mult}  # kg CO2 per unit distance
 
-INSTANCE_PATH = "X-n106-k14.vrp"
-RUNTIME_SECONDS = 2
+INSTANCE_PATH = "instances/vrp/X-n115-k10.vrp"
+RUNTIME_SECONDS = 5
 SCALE = 1000
 
-weights = [(1-w, w) for w in np.linspace(0.05, 0.95, 300)] 
+weights = [(1-w, w) for w in np.linspace(0.05, 0.95, 100)] 
 
 data = read(INSTANCE_PATH, round_func="round")
 
@@ -119,14 +119,14 @@ def pareto_front(points):
 # Example
 
 total_fleet = 20
-n_diesel = 7#total_fleet // 2
-n_clean = 13#total_fleet - n_diesel
+n_diesel = total_fleet // 2
+n_clean = total_fleet - n_diesel
 
 type_labels = {0: "diesel", 1: "clean"}
 
 base_cap = Model.from_data(data).vehicle_types[0].capacity
 print(f"Base capacity: {base_cap[0]}")
-Q_by_type = {"diesel": base_cap[0], "clean": base_cap[0]}  
+Q_by_type = {"diesel": base_cap[0], "clean": int(0.9 * base_cap[0])}  
 
 records = []  # (w_dist, w_co2, dist, true_co2)
 
@@ -160,7 +160,7 @@ plt.scatter(xs, ys, alpha=0.4, label="All solutions")
 # non-dominated points
 plt.scatter(fx, fy, color="red", s=60, label="Non-dominated")
 # line showing the Pareto front
-plt.plot(fx, fy, color="red", linewidth=2)
+# plt.plot(fx, fy, color="red", linewidth=2)
 
 # plt.scatter(xs, ys)
 plt.xlabel("Total distance")
@@ -168,6 +168,8 @@ plt.ylabel("CO$_2$ emissions")
 plt.title(f"Distance vs CO$_2$ ({INSTANCE_PATH.removesuffix(".vrp")})")
 plt.grid(True, alpha=0.3)
 plt.show()
+
+print(front)
 
 
 
