@@ -74,115 +74,134 @@ def create_green_instance(vrp_path: str | Path, fleet: List[VehicleType], profil
 import numpy as np
 from typing import List
 
-
 def decode_permutation_to_routes(perm: np.ndarray, inst: GreenInstance):
     """
-    Builds routes in permutation order while respecting the remaining fleet.
-    A route is extended only as long as at least one still-available vehicle
-    type can serve its load. When that is no longer true, the current route is
-    closed and assigned to the greenest feasible available vehicle.
+    Split-based decoder.
     """
-    if len(perm) == 0:
+    perm = np.asarray(perm, dtype=int)
+    n = len(perm)
+
+    if n == 0:
         return []
 
+    D = inst.distance_matrix
+    demands = inst.demands
+    depot = inst.depot_index
     fleet = inst.fleet
-    n_types = len(fleet)
 
-    # Greener first; tie-break by smaller capacity first.
-    fleet_order = sorted(
-        range(n_types),
-        key=lambda k: (fleet[k].co2_multiplier, fleet[k].capacity)
-    )
+    # Route CO2 for a specific vehicle type
+    def route_co2_with_type(customers: List[int], vehicle_type_idx: int) -> float:
+        vt = fleet[vehicle_type_idx]
+        Qk = vt.capacity
+        multk = vt.co2_multiplier
 
-    vehicles_used = [0] * n_types
+        seq = [depot] + customers + [depot]
+        remaining_load = float(sum(demands[c - 1] for c in customers))
+        total = 0.0
+
+        for t in range(len(seq) - 1):
+            a, b = seq[t], seq[t + 1]
+            dist = D[a, b]
+
+            load_ratio = remaining_load / Qk if Qk > 0 else 0.0
+            fuel_per_dist = inst.f0 * (1.0 + inst.alpha * (load_ratio ** inst.beta)) * multk
+            total += dist * inst.gamma * fuel_per_dist
+
+            if b != depot:
+                remaining_load -= demands[b - 1]
+
+        return float(total)
+
+    # feasible vehicle types for a given load
+    def feasible_types_for_load(load: float) -> List[int]:
+        return [k for k, vt in enumerate(fleet) if load <= vt.capacity]
+
+    # split DP
+    # V[j] = best split cost for first j customers in perm
+    # P[j] = predecessor index of j in the shortest path
+    V = np.full(n + 1, np.inf, dtype=float)
+    P = np.full(n + 1, -1, dtype=int)
+
+    V[0] = 0.0
+
+    # Split using incremental route-cost update
+    for i in range(1, n + 1):
+        load = 0.0
+        cost = 0.0
+
+        for j in range(i, n + 1):
+            cust_j = int(perm[j - 1])
+            load += float(demands[cust_j - 1])
+
+            # Incremental distance update as in the split algorithm:
+            # first customer: depot -> s_i -> depot
+            # extension: remove previous last->depot, add prev->new and new->depot
+            if i == j:
+                cost = D[depot, cust_j] + D[cust_j, depot]
+            else:
+                cust_prev = int(perm[j - 2])
+                cost = cost - D[cust_prev, depot] + D[cust_prev, cust_j] + D[cust_j, depot]
+
+            # At least one vehicle type can carry the accumulated load
+            if not feasible_types_for_load(load):
+                break
+
+            # Relax arc (i-1, j)
+            new_cost = V[i - 1] + cost
+            if new_cost < V[j]:
+                V[j] = new_cost
+                P[j] = i - 1
+
+    # Recover split from predecessor vector P
+    segments = []
+    j = n
+    while j > 0:
+        i = P[j]
+        if i < 0:
+            # Should not happen unless something is badly infeasible.
+            # Fallback: one customer per route from the beginning.
+            segments = [(k, k + 1) for k in range(n)]
+            break
+
+        segments.append((i, j))
+        j = i
+
+    segments.reverse()
+
+    # Assign vehicle types to the decoded routes
+    vehicles_used = [0] * len(fleet)
     routes = []
 
-    # def route_load(route):
-    #     return sum(inst.demands[cust - 1] for cust in route)
+    for i, j in segments:
+        customers = perm[i:j].tolist()
+        load = float(sum(demands[c - 1] for c in customers))
 
-    def feasible_vehicle_types(load):
-        """
-        Returns vehicle type indices that:
-        - still have availability
-        - can carry the given load
-        Ordered from greenest to least green.
-        """
-        feasible = []
-        for k in fleet_order:
-            vt = fleet[k]
-            if vehicles_used[k] < vt.max_vehicles and load <= vt.capacity:
-                feasible.append(k)
-        return feasible
+        feasible = feasible_types_for_load(load)
 
-    def assign_vehicle(load):
-        """
-        Assign greenest feasible available vehicle to a route load.
-        Returns vehicle type index or None if no feasible type exists.
-        """
-        feasible = feasible_vehicle_types(load)
-        return feasible[0] if feasible else None
+        available_feasible = [
+            k for k in feasible
+            if vehicles_used[k] < fleet[k].max_vehicles
+        ]
 
-    current_route = []
-    current_load = 0.0
-
-    for cust in perm:
-        cust = int(cust)
-        demand = float(inst.demands[cust - 1])
-
-        # Candidate load if we append this customer.
-        new_load = current_load + demand
-
-        # Can some remaining vehicle still serve this enlarged route?
-        if feasible_vehicle_types(new_load):
-            current_route.append(cust)
-            current_load = new_load
-            continue
-
-        # Otherwise, close the current route first.
-        if not current_route:
-            # Single customer already infeasible for all remaining vehicles.
-            # Assign fallback to largest-capacity vehicle type and let penalties
-            # handle infeasibility later.
-            fallback = int(np.argmax([vt.capacity for vt in fleet]))
-            vehicles_used[fallback] += 1
-            routes.append({
-                "vehicle_type": fallback,
-                "customers": [cust],
-            })
-            current_route = []
-            current_load = 0.0
-            continue
-
-        assigned_type = assign_vehicle(current_load)
-
-        if assigned_type is None:
-            # Should be rare: the route was feasible earlier, but fleet got
-            # exhausted in a way that leaves no legal assignment now.
-            fallback = int(np.argmax([vt.capacity for vt in fleet]))
-            assigned_type = fallback
+        if available_feasible:
+            assigned_type = min(
+                available_feasible,
+                key=lambda k: route_co2_with_type(customers, k)
+            )
+        elif feasible:
+            # Feasible by capacity, but fleet count exhausted.
+            assigned_type = min(
+                feasible,
+                key=lambda k: route_co2_with_type(customers, k)
+            )
+        else:
+            # No type can carry the route: fallback to largest vehicle.
+            assigned_type = int(np.argmax([vt.capacity for vt in fleet]))
 
         vehicles_used[assigned_type] += 1
         routes.append({
             "vehicle_type": assigned_type,
-            "customers": current_route,
-        })
-
-        # Start a new route with current customer.
-        current_route = [cust]
-        current_load = demand
-
-    # Close the final route.
-    if current_route:
-        assigned_type = assign_vehicle(current_load)
-
-        if assigned_type is None:
-            fallback = int(np.argmax([vt.capacity for vt in fleet]))
-            assigned_type = fallback
-
-        vehicles_used[assigned_type] += 1
-        routes.append({
-            "vehicle_type": assigned_type,
-            "customers": current_route,
+            "customers": customers,
         })
 
     return routes
@@ -372,7 +391,7 @@ if __name__ == "__main__":
         clean_multiplier=0.45,
         diesel_multiplier=1.0,
         pop_size=300,
-        n_gen=300,
+        n_gen=500,
         seed=42,
     )
 
@@ -394,7 +413,7 @@ import matplotlib.pyplot as plt
 F = res.F
 plt.scatter(F[:, 0], F[:, 1])
 plt.xlabel("Total distance")
-plt.ylabel("Total CO2")
-plt.title("NSGA-II Pareto front")
+plt.ylabel("CO$_2$ emissions")
+plt.title(f"Distance vs CO$_2$ ({vrp_file.removesuffix(".vrp")})")
 plt.show()
 
