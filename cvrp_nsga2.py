@@ -324,9 +324,9 @@ def solve_green_nsga2(
     clean_count: int,
     clean_multiplier: float = 0.45,
     diesel_multiplier: float = 1.0,
-    pop_size: int = 100,
+    pop_size: int = 300,
     n_gen: int = 300,
-    seed: int = 1,
+    seed: int = 0,
 ):
     fleet = [
         VehicleType(
@@ -380,40 +380,54 @@ def decode_solution(x: np.ndarray, inst: GreenInstance):
 # Example
 
 if __name__ == "__main__":
-    vrp_file = "instances/vrp/X-n106-k14.vrp"
+    vrp_file = "instances/vrp/X-n115-k10.vrp"
 
     inst, problem, res = solve_green_nsga2(
         vrp_path=vrp_file,
-        diesel_capacity=600,
+        diesel_capacity=169,
         diesel_count=10,
-        clean_capacity=540,
+        clean_capacity=int(169*0.9),
         clean_count=10,
         clean_multiplier=0.45,
         diesel_multiplier=1.0,
         pop_size=300,
-        n_gen=500,
-        seed=42,
+        n_gen=300,
+        seed=0,
     )
 
     print("\nPareto objective values [distance, co2]:")
     print(res.F)
 
-    print("\nOne Pareto solution:")
-    one = decode_solution(res.X[0], inst)
-    print("Distance:", one["distance"])
-    print("CO2:", one["co2"])
-    print("Constraint violations:", one["constraints"])
-    print("Routes:")
-    for idx, r in enumerate(one["routes"], start=1):
-        vt_name = inst.fleet[r["vehicle_type"]].name
-        print(f"  Route {idx:02d} [{vt_name}]: {r['customers']}")
+    # print(f"\nAll {len(res.X)} Pareto solutions:")
+    # for sol_idx, x in enumerate(res.X, start=1):
+    #     solution = decode_solution(x, inst)
+    #     print(f"\n--- Solution {sol_idx} ---")
+    #     print("Distance:", solution["distance"])
+    #     print("CO2:", solution["co2"])
+    #     print("Constraint violations:", solution["constraints"])
+    #     print("Routes:")
+    #     for idx, r in enumerate(solution["routes"], start=1):
+    #         vt_name = inst.fleet[r["vehicle_type"]].name
+    #         print(f"  Route {idx:02d} [{vt_name}]: {r['customers']}")
+    print(f"\nAll {len(res.X)} Pareto solutions:")
+    for sol_idx, x in enumerate(res.X, start=1):
+        solution = decode_solution(x, inst)
+        print(f"\n--- Solution {sol_idx} ---")
+        print("Distance:", solution["distance"])
+        print("CO2:", solution["co2"])
+        print("Constraint violations:", solution["constraints"])
+        print("Routes:")
+        for idx, r in enumerate(solution["routes"], start=1):
+            vt_name = inst.fleet[r["vehicle_type"]].name
+            print(f"  Route {idx:02d} [{vt_name}]: {r['customers']}")
 
-import matplotlib.pyplot as plt
 
-F = res.F
-plt.scatter(F[:, 0], F[:, 1])
-plt.xlabel("Total distance")
-plt.ylabel("CO$_2$ emissions")
-plt.title(f"Distance vs CO$_2$ ({vrp_file.removesuffix(".vrp")})")
-plt.show()
+# import matplotlib.pyplot as plt
+
+# F = res.F
+# plt.scatter(F[:, 0], F[:, 1])
+# plt.xlabel("Total distance")
+# plt.ylabel("CO$_2$ emissions")
+# plt.title(f"Distance vs CO$_2$ ({vrp_file.removesuffix(".vrp")})")
+# plt.show()
 
