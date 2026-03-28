@@ -21,7 +21,7 @@ INSTANCE_PATH = "instances/vrp/X-n115-k10.vrp"
 RUNTIME_SECONDS = 5
 SCALE = 1000
 
-weights = [(1-w, w) for w in np.linspace(0.05, 0.95, 100)] 
+weights = [(1-w, w) for w in np.linspace(0.05, 0.95, 300)] 
 
 data = read(INSTANCE_PATH, round_func="round")
 
@@ -144,7 +144,7 @@ for i, (w_dist, w_co2) in enumerate(weights, start=1):
     print(f"Solution {i}: w_dist={w_dist:.2f}, w_co2={w_co2:.2f} -> dist={dist}, trueCO2={co2:.2f}")
 
 points = [(r[2], r[3], r[0], r[1]) for r in records]
-front = pareto_front(points)
+front = pareto_front(points) # (dist, co2, w_dist, w_co2)
 
 for i, (dist, co2, w_dist, w_co2) in enumerate(front, start=1):
     print(f"Pareto {i}: dist={dist}, co2={co2:.2f}, weights=({w_dist:.2f}, {w_co2:.2f})")
@@ -172,4 +172,118 @@ plt.show()
 print(front)
 
 
+# Representing the best optimal solution in bi-objetive space
+def true_co2_of_best_routes(best_routes, data, Q_diesel, f0, alpha, beta, gamma, mult):
+    """almost the same as true_co2_of_solution but takes best_routes instead of sol and assumes all vehicles are diesel for simplicity"""
+    total_co2 = 0.0
+    clients = data.clients()
+    D = data.distance_matrix(0)
 
+    for route in best_routes:
+        visits = [0] + route + [0]   # depot + customers + depot
+
+        demand = sum(demand_at_visit_id(i, clients) for i in route)
+        remaining = float(demand)
+
+        for a, b in zip(visits[:-1], visits[1:]):
+            dij = float(D[a][b])
+
+            l_ij = 0.0 if Q_diesel <= 0 else remaining / Q_diesel
+            f_ij = f0 * (1.0 + alpha * (l_ij ** beta)) * mult["diesel"]
+            total_co2 += dij * gamma * f_ij
+
+            if b != 0:
+                remaining -= demand_at_visit_id(b, clients)
+
+    return float(total_co2)
+
+# # X-n106-14
+# best_routes = [
+#     [54, 77, 83, 2, 17, 69, 105, 64, 94, 82],
+#     [57, 63, 31, 40, 13, 85, 21, 74],
+#     [5, 44, 15, 76, 51, 100, 45, 96],
+#     [71, 49, 99, 11, 34, 72, 29],
+#     [53, 103, 101, 93, 97, 43, 87, 60],
+#     [67, 48, 8, 36, 91, 88, 58, 14],
+#     [1, 104, 12, 9, 84, 75, 7],
+#     [62, 26, 90, 24, 102, 92, 52],
+#     [28, 66, 46, 79, 37, 27, 19, 78],
+#     [22, 33],
+#     [56, 20, 16, 10, 41, 18, 86],
+#     [59, 89, 30, 42, 23, 3, 32, 73, 35],
+#     [39, 50, 81, 6, 70, 4, 98, 55],
+#     [68, 95, 38, 65, 80, 61, 47, 25],
+# ]
+# best_dist = 26362  # known best distance
+# best_co2 = true_co2_of_best_routes(
+#     best_routes,
+#     data,
+#     Q_diesel=Q_by_type["diesel"],
+#     f0=f0,
+#     alpha=alpha,
+#     beta=beta,
+#     gamma=gamma,
+#     mult=mult,
+# )
+
+# print(f"Best known solution -> dist={best_dist}, CO2={best_co2:.2f}")
+# # Output: Best known solution -> dist=26362, CO2=22630.28
+
+# # X-n110-13
+# best_routes = [
+#     [27, 59, 95, 17, 31, 28, 39, 50, 52],
+#     [58, 12, 41, 21, 75, 88, 96, 54, 68],
+#     [19, 63, 72, 10, 86, 100, 62, 8, 49],
+#     [23, 13, 57, 107, 82, 48, 47, 40],
+#     [70, 44, 81, 94, 37, 7, 35, 73],
+#     [79, 32, 74, 78, 29, 16, 90, 1],
+#     [91, 38, 108, 3, 14],
+#     [105, 20, 92, 97, 42, 106, 67, 34, 45],
+#     [5, 46, 89, 51, 85, 11, 77, 6],
+#     [98, 66, 53, 15, 26, 87, 84, 18, 109],
+#     [56, 102, 33, 9, 101, 4, 24, 103, 25, 69],
+#     [71, 93, 104, 60, 61, 22, 83, 76, 55, 30],
+#     [99, 65, 36, 64, 43, 2, 80],
+# ]
+# best_dist = 14971  # known best distance
+# best_co2 = true_co2_of_best_routes(
+#     best_routes,
+#     data,
+#     Q_diesel=Q_by_type["diesel"],
+#     f0=f0,
+#     alpha=alpha,
+#     beta=beta,
+#     gamma=gamma,
+#     mult=mult,
+# )
+
+# print(f"Best known solution -> dist={best_dist}, CO2={best_co2:.2f}")
+# # Output: Best known solution -> dist=14971, CO2=12973.87
+
+# X-n115-10
+best_routes = [
+    [10],
+    [59, 42, 35, 99, 49, 79, 47, 109, 18, 93, 3, 32, 15],
+    [16, 5, 6],
+    [89, 17, 66, 106, 73, 87, 86, 60, 48, 108, 19, 51, 25, 2, 91, 41, 104],
+    [72, 102, 24, 71, 76, 55, 80, 97, 38, 77, 58, 113, 12, 45, 96, 22, 23, 65, 36],
+    [13, 70, 56, 31, 11, 81, 33, 61, 103, 69],
+    [85, 74, 1, 7, 63, 64],
+    [46, 26, 34, 98, 37, 90, 39, 67, 40, 43, 68, 14, 8, 83, 75, 84, 112, 110, 111],
+    [52, 21, 82, 88, 105, 27, 44, 30, 114, 54, 9, 78, 53, 29, 50],
+    [95, 107, 57, 92, 4, 101, 20, 94, 62, 100, 28]
+]
+best_dist = 12747  # known best distance
+best_co2 = true_co2_of_best_routes(
+    best_routes,
+    data,
+    Q_diesel=Q_by_type["diesel"],
+    f0=f0,
+    alpha=alpha,
+    beta=beta,
+    gamma=gamma,
+    mult=mult,
+)
+
+print(f"Best known solution -> dist={best_dist}, CO2={best_co2:.2f}")
+# Output: Best known solution -> dist=12747, CO2=10951.48
