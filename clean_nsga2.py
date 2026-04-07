@@ -370,7 +370,8 @@ class GreenVRPProblem(ElementwiseProblem):
         super().__init__(
             n_var=self.n_customers,
             n_obj=2,
-            n_ieq_constr=len(inst.fleet) + 2,
+            #n_ieq_constr=len(inst.fleet) + 2, # for nsga2 uncomment this and comment th enext line
+            n_ieq_constr=0,  # <--- Change this to 0 for MOEA/D
             xl=0,
             xu=self.n_customers - 1,
             vtype=int,
@@ -381,8 +382,26 @@ class GreenVRPProblem(ElementwiseProblem):
         routes = decode_permutation_to_routes(perm, self.inst)
         total_distance, total_co2, G = evaluate_routes(routes, self.inst)
 
-        out["F"] = [total_distance, total_co2]
-        out["G"] = G
+        # out["F"] = [total_distance, total_co2]
+        # out["G"] = G
+
+        ## COMMENT this and uncomment above two lines to use nsga2
+        # --- PENALTY LOGIC ---
+        # Sum up all positive violations (where used > max_vehicles, etc.)
+        total_violation = sum(max(0, g) for g in G)
+        
+        if total_violation > 0:
+            # We add a "Big M" penalty (10^6) to make infeasible solutions undesirable
+            # This forces MOEA/D to find feasible routes
+            penalty_value = 1e6 + (total_violation * 1000)
+            f1 = total_distance + penalty_value
+            f2 = total_co2 + penalty_value
+        else:
+            f1 = total_distance
+            f2 = total_co2
+
+        # IMPORTANT: Only return F. Do NOT set out["G"]
+        out["F"] = [f1, f2]
 
 
 def solve_green_nsga2(
@@ -456,11 +475,76 @@ def decode_solution(x: np.ndarray, inst: GreenInstance):
         "constraints": G,
     }
 
+#### MOEAD
+from pymoo.util.ref_dirs import get_reference_directions
+from pymoo.algorithms.moo.moead import MOEAD
+
+def solve_green_moead(
+    vrp_path: str | Path,
+    diesel_capacity: float,
+    diesel_count: int,
+    clean_capacity: float,
+    clean_count: int,
+    clean_multiplier: float = 0.45,
+    diesel_multiplier: float = 1.0,
+    # For 2 objectives, n_partitions + 1 = Population Size
+    n_partitions: int = 99,   # 2 objectives => 100 reference directions
+    n_gen: int = 300,
+    seed: int = 0,
+    pyvrp_runtime: float = 2.0,):
+    
+    fleet = [
+        VehicleType("diesel", diesel_capacity, diesel_count, diesel_multiplier),
+        VehicleType("clean", clean_capacity, clean_count, clean_multiplier),
+    ]
+    inst = create_green_instance(vrp_path, fleet=fleet)
+    problem = GreenVRPProblem(inst)
+
+    initial_perm = get_pyvrp_initial_permutation(
+        vrp_path, diesel_capacity, diesel_count, clean_capacity, clean_count, seed, pyvrp_runtime
+    )
+
+    # 1. Generate Reference Directions
+    # "das-dennis" with 2 objectives and n_partitions=99 creates 100 subproblems
+    ref_dirs = get_reference_directions("das-dennis", 2, n_partitions=n_partitions)
+
+    algorithm = MOEAD(
+        ref_dirs,
+        n_neighbors=10,  # Size of the weight-vector neighborhood, 10% of the pop_size/n_partitions
+        prob_neighbor_mating=0.4,#0.7,   # Probability of mating within neighborhood
+        sampling=PyVRPInitialSampling(initial_perm, seed=seed),
+        crossover=OrderCrossover(prob=0.8),
+        mutation=SwapMutation(prob=0.5),
+    )
+
+    res = minimize(
+        problem,
+        algorithm,
+        termination=("n_gen", n_gen),
+        seed=seed,
+        verbose=True,
+    )
+
+    return inst, problem, res, initial_perm
+
 
 if __name__ == "__main__":
     vrp_file = "instances/vrp/X-n106-k14.vrp"
 
-    inst, problem, res, initial_perm = solve_green_nsga2(
+    # inst, problem, res, initial_perm = solve_green_nsga2(
+    #     vrp_path=vrp_file,
+    #     diesel_capacity=600,
+    #     diesel_count=10,
+    #     clean_capacity=int(600 * 0.9),
+    #     clean_count=10,
+    #     clean_multiplier=0.45,
+    #     diesel_multiplier=1.0,
+    #     pop_size=5000,
+    #     n_gen=5000,
+    #     seed=0,
+    #     pyvrp_runtime=2.0,
+    # )
+    inst, problem, res, initial_perm = solve_green_moead(
         vrp_path=vrp_file,
         diesel_capacity=600,
         diesel_count=10,
@@ -468,16 +552,16 @@ if __name__ == "__main__":
         clean_count=10,
         clean_multiplier=0.45,
         diesel_multiplier=1.0,
-        pop_size=5000,
-        n_gen=5000,
+        n_partitions=699,  # 2 objectives => 100 reference directions
+        n_gen=700,
         seed=0,
         pyvrp_runtime=2.0,
     )
-    
 
     print("\nInitial PyVRP customer order:")
     print(initial_perm)
 
+    #np.set_printoptions(threshold=np.inf)
     print("\nPareto objective values [distance, co2]:")
     print(res.F)
 
