@@ -1,6 +1,6 @@
 # Weighted-sum Green CVRP workflow
 
-This script solves a bi-objective Green CVRP with two vehicle types (`diesel` and `clean`) using a weighted-sum approach on top of PyVRP.
+This implementation is provided in the file `weighted-sum.py`. It solves a bi-objective Green CVRP with two vehicle types (`diesel` and `clean`) using a weighted-sum approach on top of PyVRP.
 
 The code follows this workflow:
 
