@@ -1,4 +1,5 @@
 # Modification of Instances
+Instances can be found in the folder [`instances/vrp`](instances/vrp).
 - **Vehicle capacities**  
   - `diesel`: uses the original capacity from the instance  
   - `clean`: uses **90% of the original capacity**
