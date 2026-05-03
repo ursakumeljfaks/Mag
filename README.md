@@ -1,3 +1,17 @@
+# Modification of Instances
+- **Vehicle capacities**  
+  - `diesel`: uses the original capacity from the instance  
+  - `clean`: uses **90% of the original capacity**
+
+- **Fleet composition**  
+  - Total fleet size: **20 vehicles**  
+  - Evenly split between types:
+    - 10 `diesel` vehicles  
+    - 10 `clean` vehicles  
+
+- **Other parameters**  
+  - All remaining instance data (customer locations, demands, etc.) remain unchanged from the original instances
+
 # Weighted-sum Green CVRP workflow
 
 This implementation is provided in the file [`weighted_sum.py`](weighted_sum.py). It solves a bi-objective Green CVRP with two vehicle types (`diesel` and `clean`) using a weighted-sum approach on top of PyVRP.
