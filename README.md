@@ -83,7 +83,7 @@ The code follows this workflow:
 
 
 # Approach 2 of Green CVRP with NSGA-II workflow
-This implementation is provided in the file [`2nd_approach/nsga2_normalized.py`](nsga2_normalized.py). It solves a bi-objective Green CVRP with two vehicle types (`diesel` and `clean`) using NSGA-II algorithm.
+This implementation is provided in the file [`nsga2_normalized.py`](2nd_approach/nsga2_normalized.py). It solves a bi-objective Green CVRP with two vehicle types (`diesel` and `clean`) using NSGA-II algorithm.
 
 ## Chromosome Representation
 Each individual chromosome contains three parts: [customer order | route split positions | vehicle types]\
