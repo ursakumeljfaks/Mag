@@ -86,7 +86,7 @@ The code follows this workflow:
 This implementation is provided in the file [`later.py`](clean_nsga2.py). It solves a bi-objective Green CVRP with two vehicle types (`diesel` and `clean`) using NSGA-II algorithm.
 
 ## Chromosome Representation
-Each individual chromosome contains three parts: [customer order | route split positions | vehicle types]
+Each individual chromosome contains three parts: [customer order | route split positions | vehicle types] \\
 Example: x = [3,1,5,2,6,4,2,4,1,0,1] -> routes: [3,1] use clean (1), [5,2] use diesel (0), [6,4] use clean (1)
 
 Key functions/methods in code:
