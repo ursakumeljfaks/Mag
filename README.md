@@ -90,7 +90,7 @@ Each individual chromosome contains three parts: [customer order | route split p
 Example: x = [3,1,5,2,6,4,2,4,1,0,1] -> routes: [3,1] use clean (1), [5,2] use diesel (0), [6,4] use clean (1)
 
 Key functions/methods in code:
-1. Sampling: The initial NSGA-II population is created using a mixture of: distance seed, CO$_2$ seed, weighted-sum seeds, random seeds. Random seeds are small because we want to guide the solution to weighted-sum front. Also it creates variations of these seeds to make new ones.
+1. Sampling: The initial NSGA-II population is created using a mixture of: distance seed, CO~2~ seed, weighted-sum seeds, random seeds. Random seeds are small because we want to guide the solution to weighted-sum front. Also it creates variations of these seeds to make new ones.
 2. Evauation function for NSGA-II:
    - Chromosome is converted into routes: If there are no routes, or too many routes, the solution receives a large penalty.
    - Assign vehicle types greedily: start with diesel for every route, check which routes can use clean, compute CO$_2$ saving from using clean, assign clean to the routes with biggest CO$_2$ savings (because        of this function we do not need to mutate vehicle types).
