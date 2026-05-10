@@ -82,3 +82,29 @@ The code follows this workflow:
     - vehicle type used by each route.
 
 
+# Approach 2 of Green CVRP with NSGA-II workflow
+This implementation is provided in the file [`later.py`](clean_nsga2.py). It solves a bi-objective Green CVRP with two vehicle types (`diesel` and `clean`) using NSGA-II algorithm.
+
+## Chromosome Representation
+Each individual chromosome contains three parts: [customer order | route split positions | vehicle types]
+Example: x = [3,1,5,2,6,4,2,4,1,0,1] -> routes: [3,1] use clean (1), [5,2] use diesel (0), [6,4] use clean (1)
+
+Key functions/methods in code:
+1. Sampling: The initial NSGA-II population is created using a mixture of: distance seed, CO$_2$ seed, weighted-sum seeds, random seeds. Random seeds are small because we want to guide the solution to weighted-sum front. Also it creates variations of these seeds to make new ones.
+2. Evauation function for NSGA-II:
+   - Chromosome is converted into routes: If there are no routes, or too many routes, the solution receives a large penalty.
+   - Assign vehicle types greedily: start with diesel for every route, check which routes can use clean, compute CO$_2$ saving from using clean, assign clean to the routes with biggest CO$_2$ savings (because        of this function we do not need to mutate vehicle types).
+   - Check capacity feasibility
+   - Check fleet feasibility
+   - Comupte distance and CO$_2$
+   - Normalize objectives: The raw objectives are normalized before being passed to NSGA-II. This is done because distance and CO$_2$ can have very different numerical scales. Without normalization, one               objective could dominate the optimization process simply because its values are larger. NSGA-II uses normalized values, but the final reporting still uses real distance and CO$_2$.
+3. Normalization bounds: They are created from PyVRP weighted-sum reference solutions and provide approximate minimum and maximum ranges for distance and CO$_2$. If reference points are unavailable, the code falls back to raw objective values.
+
+Instead of forcing the algorithm to learn which routes should be clean or diesel, the code automatically assigns clean vehicles to the routes where they provide the largest CO$_2$ reduction (function `assign_best_vehicle_types()`). Therefore, the evolutionary search focuses more on finding good customer orderings and route splits.
+
+
+
+
+
+
+
